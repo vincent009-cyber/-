@@ -1,0 +1,270 @@
+<4.28>
+<待處理:residuals 分布>
+<待處理:sktest 用法>
+<Q5待解決:次方一直往上疊是否有其極限存在，以及是否會有其他問題?>
+/*Q1*/
+        /*Linear model*/
+            /*(1)predition*/
+                regress northampton time
+                predict yhat, xb
+                predict ehat, residuals
+                twoway (scatter northampton time) (lfit northampton time)
+            /*(2)檢查residuals分布*/
+                rvpplot time, yline(0)
+            /*(3)檢查error normality tests常態分布*/
+                /*純做直方圖*/
+                    histogram ehat, percent title(Linear model residuals)
+                /*做jbtest改善看看，檢查ehat是否常態(若要嚴謹應做虛無假設)*/
+                    summarize ehat, detail
+                    return list
+                    scalar jb = (r(N)/6)*((r(skewness)^2)+((r(kurtosis)-3)^2)/4)
+                    display "jarque-Bera test(jbtest)結果為:" jb 
+                    histogram ehat, frequency
+                /*檢查是否符合chi方分配*/
+                    scalar chic = invchi2tail(2, 0.05)
+                    display "chi-square 95th=" chic
+        /*Linear-log model*/
+            /*(1)predition*/
+                generate ltime = ln(time)
+                regress northampton ltime
+                predict lyhat, xb
+                predict lehat, residuals
+                twoway (scatter northampton time, sort) (line lyhat time, sort)
+            /*(2)檢查residuals分布*/
+                rvpplot time, yline(0)
+            /*(3)檢查error normality tests常態分布*/
+                /*純做直方圖*/
+                    histogram lehat, percent title(Linear-log model residuals)
+                /*做jbtest改善看看，檢查ehat是否常態(若要嚴謹應做虛無假設)*/
+                    summarize lehat, detail
+                    return list
+                    scalar jb = (r(N)/6)*((r(skewness)^2)+((r(kurtosis)-3)^2)/4)
+                    display "jarque-Bera test(jbtest)結果為:" jb 
+                    histogram lehat, frequency
+                /*檢查是否符合chi方分配*/
+                    scalar chic = invchi2tail(2, 0.05)
+                    display "chi-square 95th=" chic
+
+        /*Quadratic model*/
+            /*(1)predition*/
+                generate time2 = time^2 
+                reg northampton time2
+                predict yhat_2
+                predict ehat_2, residuals
+                twoway (scatter northampton time, sort) (line yhat_2 time, sort)
+            /*(2)檢查residuals分布*/
+                rvpplot time, yline(0)
+            /*(3)檢查error normality tests常態分布*/
+                /*純做直方圖*/
+                    histogram ehat_2, percent title(Quadratic model residuals)
+                /*做jbtest改善看看，檢查ehat是否常態(若要嚴謹應做虛無假設)*/
+                    summarize ehat_2, detail
+                    return list
+                    scalar jb = (r(N)/6)*((r(skewness)^2)+((r(kurtosis)-3)^2)/4)
+                    display "jarque-Bera test(jbtest)結果為:" jb 
+                    histogram ehat_2, frequency
+                /*檢查是否符合chi方分配*/
+                    scalar chic = invchi2tail(2, 0.05)
+                    display "chi-square 95th=" chic
+
+        /*Log-linear model*/
+            /*(1)predition*/
+                generate lnorthampton = ln(northampton) 
+                reg lnorthampton time
+                predict lnyhat
+                predict lnehat, residuals
+                twoway (scatter northampton time, sort) (line lnyhat time, sort)
+            /*(2)檢查residuals分布*/
+                rvpplot time, yline(0)
+            /*(3)檢查error normality tests常態分布*/
+                /*純做直方圖*/
+                    histogram lnehat, percent title(Log-linear model residuals)
+                /*做jbtest改善看看，檢查ehat是否常態(若要嚴謹應做虛無假設)*/
+                    summarize lnehat, detail
+                    return list
+                    scalar jb = (r(N)/6)*((r(skewness)^2)+((r(kurtosis)-3)^2)/4)
+                    display "jarque-Bera test(jbtest)結果為:" jb 
+                    histogram lnehat, frequency
+                /*檢查是否符合chi方分配*/
+                    scalar chic = invchi2tail(2, 0.05)
+                    display "chi-square 95th=" chic
+            /*(4)R平方Natural, corrected*/
+                    ereturn list
+                    scalar sig2 =e(rss)/e(df_r)
+                    display"sigma-hat square=" sig2
+                    generate yhatn = exp(lnyhat)
+                    generate yhatc = yhatn*exp(sig2/2)
+                    correlate northampton yhatn yhatc
+                    return list
+                    display"r2g=" r(rho)^2
+                /*畫圖*/
+                    twoway(scatter northampton time)(line yhatc time)
+                    twoway(scatter northampton time, sort)(line yhatc time,sort)(line yhatn time,sort lpattern(dash))
+     
+/*Q2*/
+/*在Quadratic model情況下(式子三)，解釋係數的意義*/
+        運用觀念: 
+        Slope = dy/dx
+        Slope值 = 2*(B2係數)*X
+        lincom計算子
+
+        在stata輸入: 
+        /*發現邊際效果呈現遞增*/
+        regress northampton time2 
+        scalar xbar = r(mean)
+        lincom 2*time2*xbar
+        lincom 2*time2*10
+        lincom 2*time2*20
+        lincom 2*time2*30
+
+
+/*Q3*/
+/*在Quadratic model情況下(式子三)，尋找unusual(Influential) observations*/
+        gen time2 = time^2
+        /*法1使用 studentized residuals*/
+            predict ehatstu, rstudent
+            list ehatstu ehat northampton time2 if abs(ehatstu) > 2
+
+        /*法2使用 LEVERAGE*/
+            scalar k = e(df_m)+1
+            scalar nobs = e(N)
+            predict h, leverage
+            display "leverage average =" k/nobs
+            list h sqrtime if h > 2*k/nobs
+
+        /*法3使用DFBETAS*/
+            predict dfbeta2, dfbeta(time2)
+            display "dfbetas threshold" 2/sqrt(nobs)
+            list dfbeta2 northampton time2 if abs(dfbeta2) > 2/sqrt(nobs)
+
+        /*法4使用 DFFITS*/
+            predict dfits, dfits
+            display "dfits threshold" 2*sqrt(k/nobs)
+            list dfits yhat northampton time2 if abs(dfits) > 2*sqrt(k/nobs)
+
+/*Q4*/
+/*Quadratic model情況下(式子三)，尋找95%prediction interval for 1997*/
+        gen time2 = time^2 
+        reg northampton time2 if time<=47
+        predict yhat_2, xb
+        predict ehat_2, residuals
+        predict sef, stdf
+        scalar tc=invttail(45,0.025)
+        generate lb_n = yhat_2-tc*sef
+        generate ub_n = yhat_2+tc*sef
+        list lb_n  ub_n in 48
+
+/*Q5*/
+/*延伸思考 why cubic or ^4 or more power*/
+/*先快速檢查誰的r-square最大-利用matrix*/
+            generate time2 = time^2 
+            generate time3 = time^3 
+            generate time4 = time^4
+            generate time5 = time^5 
+                reg northampton time2
+                    scalar r2_2= e(r2)
+                reg northampton time3
+                    scalar r2_3= e(r2)
+                reg northampton time4
+                    scalar r2_4= e(r2)
+                reg northampton time5
+                    scalar r2_5= e(r2)
+            matrix A = ( r2_2, r2_3, r2_4, r2_5  )
+            matrix colnames A = time2 time3 time4 time5
+            matrix rownames A = r-square
+            matlist A, rowtitle(power) title(Test results for R-square)
+            mata: st_local("max", strofreal(max(st_matrix("A"))))
+            display "max result is " `max''
+/*qubic model*/
+            /*(1)predition*/
+                generate time3 = time^3 
+                reg northampton time3
+                predict yhat_3
+                predict ehat_3, residuals
+                twoway (scatter northampton time, sort) (line yhat_3 time, sort)
+            /*(2)檢查residuals分布*/
+                rvpplot time, yline(0)
+            /*(3)檢查error normality tests常態分布*/
+                /*純做直方圖*/
+                    histogram ehat_3, percent title(Qubic model residuals)
+                /*做jbtest改善看看，檢查ehat是否常態(若要嚴謹應做虛無假設)*/
+                    summarize ehat_3, detail
+                    return list
+                    scalar jb = (r(N)/6)*((r(skewness)^2)+((r(kurtosis)-3)^2)/4)
+                    display "jarque-Bera test(jbtest)結果為:" jb 
+                    histogram ehat_3, frequency
+                /*檢查是否符合chi方分配*/
+                    scalar chic = invchi2tail(2, 0.05)
+                    display "chi-square 95th=" chic
+
+/*4times model*/
+            /*(1)predition*/
+                generate time4 = time^4 
+                reg northampton time4
+                predict yhat_4
+                predict ehat_4, residuals
+                twoway (scatter northampton time, sort) (line yhat_4 time, sort)
+            /*(2)檢查residuals分布*/
+                rvpplot time, yline(0)
+            /*(3)檢查error normality tests常態分布*/
+                /*純做直方圖*/
+                    histogram ehat_4, percent title(4times model residuals)
+                /*做jbtest改善看看，檢查ehat是否常態(若要嚴謹應做虛無假設)*/
+                    summarize ehat_4, detail
+                    return list
+                    scalar jb = (r(N)/6)*((r(skewness)^2)+((r(kurtosis)-3)^2)/4)
+                    display "jarque-Bera test(jbtest)結果為:" jb 
+                    histogram ehat_4, frequency
+                /*檢查是否符合chi方分配*/
+                    scalar chic = invchi2tail(2, 0.05)
+                    display "chi-square 95th=" chic
+
+/*qubic v.s. 4time model for第四題*/
+/*qubic model for第四題*/
+                    gen time3 = time^3 
+                    reg northampton time3 if time<=47
+                    predict yhat_3, xb
+                    predict ehat_3, residuals
+                    predict sef_3, stdf
+                    scalar tc=invttail(45,0.025)
+                    generate lb_n3 = yhat_3-tc*sef_3
+                    generate ub_n3 = yhat_3+tc*sef_3
+                    list  northampton lb_n3 ub_n3 in 48
+                    display "95%預測區間= [" lb_n3 , ub_n3 "]"
+                    真實值為2.2318，落在該預測區間內
+                    /*畫圖*/
+                    twoway (scatter yield time)(fpfitci yield time, level(95) estopts(degree(3))), title(prediction interval)
+
+
+
+" FOR 報告使用
+                    gen time3 = time^3 
+                    reg yield time3 if time<=47
+                    predict yhat_3, xb
+                    predict ehat_3, residuals
+                    predict sef_3, stdf
+                    scalar tc=invttail(45,0.025)
+                    generate lb_n3 = yhat_3-tc*sef_3
+                    generate ub_n3 = yhat_3+tc*sef_3
+                    list  yield lb_n3 ub_n3 in 48
+                    display "95%預測區間= [" lb_n3 , ub_n3 "]"
+                    真實值為2.2318，落在該預測區間內
+                    twoway 
+                    (scatter yield time)
+                    (fpfitci yield time, level(95) estopts(degree(3)))
+                    , title(prediction interval)
+
+"
+/*4time model for第四題*/
+                    gen time4 = time^4 
+                    reg northampton time4 if time<=47
+                    predict yhat_4, xb
+                    predict ehat_4, residuals
+                    predict sef_4, stdf
+                    scalar tc=invttail(45,0.025)
+                    generate lb_n4 = yhat_4-tc*sef_4
+                    generate ub_n4 = yhat_4+tc*sef_4
+                    list  northampton lb_n4  ub_n4 in 48
+/*qubic v.s. 4time model*/  
+                    display "interval prediction table for qubic v.s. 4time ="
+                    list  northampton lb_n3  ub_n3  lb_n4 ub_n4 in 48
